@@ -1,0 +1,103 @@
+# to list out the files
+!ls /content/sample_data/
+anscombe.json		     california_housing_train.csv  mnist_train_small.csv
+california_housing_test.csv  mnist_test.csv		   README.md
+
+# to install and run Pyspark
+!pip install pyspark findspark
+import findspark
+findspark.init()
+
+# to upload the file in colab
+from google.colab import files
+uploaded = files.upload()
+
+# to display the content of uploaded file
+file_name = list(uploaded.keys())[0]
+flipkart_df = spark.read.csv(file_name, header=True, inferSchema=True)
+flipkart_df.show(2)
+
+# to create dataframe with data and schema
+data=[(198, 'Donald', 'OConnell', 2600, 124, 50),
+(199, 'Douglas', 'Grant', 2600, 124, 50),
+(200, 'Jennifer', 'Whalen', 4400, 101, 10),
+(201, 'Michael', 'Hartstein', 13000, 100, 20),
+(202, 'Pat', 'Fay', 6000, 201, 20),
+(203, 'Susan', 'Mavris', 6500, 101, 40),
+(204, 'Hermann', 'Baer', 10000, 101, 70),
+(205, 'Shelley', 'Higgins', 12008, 101, 110),
+(206, 'William', 'Gietz', 8300, 205, 110),
+(100, 'Steven', 'King', 24000, 0, 90),
+(101, 'Neena', 'Kochhar', 17000, 100, 90)]
+schema = StructType(
+    [StructField("empid",IntegerType(), True),
+     StructField("fname",StringType(), True),
+     StructField("lname",StringType(), True),
+     StructField("salary",IntegerType(), True),
+     StructField("mgrid",StringType(), True),
+     StructField("deptid",IntegerType(), True)
+    ]
+)
+df=spark.createDataFrame(data=data,schema=schema)
+df.show()
+
+# to write the final output in csv file
+flipkart_df_transformed.write.csv("/content/flipkart_results.csv", header=True, mode="overwrite")
+
+from pyspark.sql.functions import expr,col,isnan,when,count,regexp_replace,sum
+from pyspark.sql.types import IntegerType,DoubleType,StringType
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.appName("google_playstore_project").getOrCreate()
+
+from google.colab import files
+uploaded = files.upload()
+file_name = list(uploaded.keys())[0]
+playstore_df = spark.read.csv(file_name, header=True, inferSchema=True)
+playstore_df.show(2)
+playstore_df.printSchema()
+
+playstore_df.describe().show(2)
+
+playstore_df1 = playstore_df.drop("Size","Content Rating","Last Updated","Current Ver","Android Ver")
+
+playstore_df2 = playstore_df1.withColumn("Reviews",col("Reviews").cast(IntegerType()))\
+.withColumn("Installs",regexp_replace(col("Installs"),"[^0-9]",""))\
+.withColumn("Installs",col("Installs").cast(IntegerType()))\
+.withColumn("Rating",col("Installs").cast(DoubleType()))\
+.withColumn("Price",regexp_replace(col("Price"),"[$]",""))\
+.withColumn("Price",(col("Price").cast(IntegerType())))
+playstore_df2.printSchema()
+
+playstore_df2.select([count(when(col(c).isNull(), c)).alias(c) for c in playstore_df2.columns]).show()
+playstore_df2.count()
+
+playstore_df2_filled=playstore_df2.fillna({"Reviews":0,"Rating":0,"Price":0,"installs":0})
+playstore_df2_filled.count()
+
+from pyspark.sql import functions as F
+gps_df = playstore_df2_filled.groupBy("App").agg(F.sum("Reviews").alias("Total_Reviews"))
+gps_df = gps_df.orderBy(F.desc("Total_Reviews"))
+gps_df.show(10)
+
+from pyspark.sql.functions import expr,col,isnan,when,count,regexp_replace,sum,desc
+gps_df = playstore_df2_filled.groupBy("App").sum("Reviews")
+gps_df = gps_df.orderBy(desc("sum(Reviews)"))
+gps_df.show(10)
+
+playstore_df2_filled.createOrReplaceTempView("apps")
+result_df = spark.sql("SELECT * FROM apps LIMIT 5")
+result_df.show()
+
+result_df1 = spark.sql("SELECT App, sum(Installs) FROM apps group by 1 order by 2 desc LIMIT 10")
+result_df1.show()
+
+gps_df = playstore_df2_filled.groupBy("App","Type").agg(sum("Installs").alias("Apps_install_type"))
+gps_df = gps_df.orderBy(desc("Apps_install_type"))
+gps_df.show(10)
+
+result_df2 = spark.sql("SELECT App,Type, sum(Installs) FROM apps group by 1,2 order by 3 desc LIMIT 10")
+result_df2.show()
+
+# Apply Join on both 
+cust_prod_df = sales_df.join(menu_df,"product_id")
+cust_prod_df.show(2)
